@@ -10,6 +10,8 @@ function [times steer_ticks traction_ticks poses sensor_poses] = reader()
     steer_ticks = [];
     traction_ticks = [];
     k_steer = 0; k_traction = 0; axis_length = 0; steer_offset = 0; k_steer_max = 0; k_traction_max = 0;
+    past_time=0; past_steer_ticks=0; past_traction_ticks=0;
+    new_time=0; new_steer_ticks=0; new_traction_ticks=0;
     fid = fopen(filepath,'r');
     i = 1;
     while true
@@ -28,21 +30,37 @@ function [times steer_ticks traction_ticks poses sensor_poses] = reader()
             k_steer_max = elems{2};
             k_traction_max = elems{3};
         end
-        if i>6 #line 34 possibile errore... passiamo da -2 a 9 ....
+        if i ==6
+            past_time=read_time(elems);
+            past_steer_ticks=read_steer_ticks(elems); 
+            past_traction_ticks=read_traction_ticks(elems);
+            
+        end
+        
+        if i>7 #line 34 possibile errore... passiamo da -2 a 9 ....
             #Get new readings
-            new_times = read_time(elems);
+            new_time = read_time(elems);
+            delta_t = new_time-past_time
+            past_time=new_time;
+            
             new_steer_ticks    = read_steer_ticks(elems);
+            delta_steer = new_steer_ticks-past_steer_ticks
+            past_steer_ticks=new_steer_ticks;
             new_traction_ticks = read_traction_ticks(elems);
+            delta_traction = new_traction_ticks-past_traction_ticks
+            past_traction_ticks=new_traction_ticks;
             new_pose = read_pose(elems);
+            
             new_sensor_pose = read_sensor_pose(elems);
             #populate the structures - encoders are not incremental...yet
             steer_ticks = [steer_ticks; new_steer_ticks];
             traction_ticks = [traction_ticks; new_traction_ticks];
             poses =[poses; new_pose] ;
             sensor_poses = [sensor_poses;new_sensor_pose];
-            times = [times;new_times];
+            times = [times;new_time];
+
         end
-        elems{1};
+        
         i+=1;
    
     end

@@ -9,8 +9,10 @@ filepath = "/dataset.txt";
 [t steer_t traction_t poses sensor_poses] = reader();
 
 #calculate the transformation between the sensor and the baseline of the robot 
+
+
 s2r = calibrate(poses,sensor_poses);
-#s2r
+s2r
 
 function plot_trajectories(poses)
     figure();
