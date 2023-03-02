@@ -1,6 +1,6 @@
 #"dataset.txt"
 #function [Time_stamp Steer_ticks Traction_tick Model_pose Tracker_pose ] = load_ds(filepath)
-function [times steer_ticks traction_ticks poses sensor_poses] = reader()
+function [times steer_ticks traction_ticks poses sensor_poses initial_guess] = reader()
     #line3 is of interest since there is the initial guess
     #line5 is of interest since there are the max ranges
     filepath = "dataset.txt";
@@ -21,52 +21,89 @@ function [times steer_ticks traction_ticks poses sensor_poses] = reader()
         end
         elems = strsplit(line,' ');
         if i == 3
-            k_steer      =elems{2};
-            k_traction   =elems{3};
-            axis_length  =elems{4};
-            steer_offset =elems{5};
+            k_steer      =  str2double(elems{2});
+            k_traction   =  str2double(elems{3});
+            axis_length  =  str2double(elems{4});
+            steer_offset =  str2double(elems{5});
         end
         if i ==5
-            k_steer_max = elems{2};
-            k_traction_max = elems{3};
+            k_steer_max    = str2double(elems{2});
+            k_traction_max = str2double(elems{3});
         end
-        if i ==6
+        if i == 7
+            t_guess = [elems{2}; elems{3} ;elems{4}];
+        end
+        if i == 8
+            r_guess = [elems{3}; elems{4}; elems{5}; elems{6}];
+        end
+        if i ==9
             past_time=read_time(elems);
             past_steer_ticks=read_steer_ticks(elems); 
             past_traction_ticks=read_traction_ticks(elems);
             
+            
         end
         
-        if i>7 #line 34 possibile errore... passiamo da -2 a 9 ....
-            #Get new readings
+        if i>9  #line 34 possibile errore... passiamo da -2 a 9 ....
+            
+            #TIME
             new_time = read_time(elems);
-            delta_t = new_time-past_time
+            delta_t = new_time-past_time;
             past_time=new_time;
             
+            #STEER          
             new_steer_ticks    = read_steer_ticks(elems);
-            delta_steer = new_steer_ticks-past_steer_ticks
-            past_steer_ticks=new_steer_ticks;
+
+  
+            #TRACTION
+            
             new_traction_ticks = read_traction_ticks(elems);
-            delta_traction = new_traction_ticks-past_traction_ticks
+            #if i==68
+            #new_traction_ticks
+            #past_traction_ticks
+            delta_traction = new_traction_ticks-past_traction_ticks;
+
+            if delta_traction < -100000
+                max_int = 4294967295; # max value for uint32
+                delta_traction = (max_int - past_traction_ticks) + new_traction_ticks;
+            endif
+            if abs(delta_traction)>5000
+                #disp("ops")
+                #delta_t
+                #delta_traction
+                #disp("-----------")
+            endif
             past_traction_ticks=new_traction_ticks;
+           
+            #delta_traction
+            #disp("-------------")
+            
+            #POSE
             new_pose = read_pose(elems);
             
+            #SENSOR POSE
             new_sensor_pose = read_sensor_pose(elems);
-            #populate the structures - encoders are not incremental...yet
+            
+            #populate the structures 
             steer_ticks = [steer_ticks; new_steer_ticks];
-            traction_ticks = [traction_ticks; new_traction_ticks];
+            
+            traction_ticks = [traction_ticks; delta_traction];
             poses =[poses; new_pose] ;
+            
             sensor_poses = [sensor_poses;new_sensor_pose];
-            times = [times;new_time];
+            
+            times = [times;delta_t];
 
         end
+
+    
         
         i+=1;
    
     end
     #initialize initial guess
-    initial_guess = [k_steer; k_traction; axis_length; steer_offset];
-    poses;
+    initial_guess = [k_steer; k_traction; axis_length; steer_offset];# t_guess; r_guess];
+    
 end
 
 function out = read_pose (elems)

@@ -3,6 +3,9 @@
 #parameter_values: 0.1 0.0106141 1.4 0 
 #joints_max_enc: [ steering traction_wheel ]
 #joints_max_enc_values: 8192 5000 
+#laser wrt base_link 
+#	translation:	[ 1.5, 0, 0 ],
+#	rotation:	 [ 0, 0, 0, 1 ]
 time: 1668091584.821040869 ticks: 290 4294859756 model_pose: 0 0 0 tracker_pose: 6.50242e-05 -0.00354605 0.000941697
 time: 1668091584.862079620 ticks: 290 4294859756 model_pose: 0 0 0 tracker_pose: 0.00101071 -0.00602303 0.00124475
 time: 1668091584.900919437 ticks: 290 4294859756 model_pose: 0 0 0 tracker_pose: 0.00193106 -0.00296753 0.000345093

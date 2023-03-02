@@ -16,7 +16,7 @@ function s2r = calibrate(poses,sensor_poses)
     #let's try if it works if the initial guess is the identity... 
     #otherwise I'll try with the linear relaxation
     threshold = 1;
-    deg = 20;
+    deg = deg2rad(20);
     s2r = eye(3);
     #s2r = [cos(deg) -sin(deg) 0.1;
     #        sin(deg) cos(deg)  0.1;
