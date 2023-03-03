@@ -22,7 +22,9 @@ filepath = "/dataset.txt";
 #x_new = calibrate(initial_guess,steer_t,traction_t,poses)
 #traction_t
 #x_new = initial_guess;
-
+x_new = calibrate(initial_guess,steer_t,traction_t,sensor_poses)
+x_k = x_new(1:4);
+x_b2s = x_new(5:7);
 h = figure(1)
 
 #step 1 display the true trajectory
@@ -53,12 +55,12 @@ pause(1);
 #
 ##step 2 find the parameters of the odomotery... solve the least square problem
 #
-#Odom_trajectory_noise = compute_odometry_trajectory_noise(x_new,steer_t,traction_t,dt);
+final_odometry = compute_odometry_trajectory_noise(x_k,steer_t,traction_t,dt,x_b2s);
 #
-#disp("noise_alibrated");
-#hold on;
-#plot(Odom_trajectory_noise(:,1),Odom_trajectory_noise(:,2), 'r-', 'linewidth', 2);
-#pause(1);
+disp("final odometry");
+hold on;
+plot(final_odometry(:,1),final_odometry(:,2), 'b-', 'linewidth', 2);
+pause(1);
 
 #TBD
 
