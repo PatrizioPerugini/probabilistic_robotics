@@ -1,6 +1,37 @@
 1;
 source "utils.m"
 
+global sin_cos_coeffs = [1, 1/2, -1/6, -1/24, 1/120, 1/720];
+
+function [s,c]=thetaTerms(x)
+  global sin_cos_coeffs;
+  a=1;
+  s=0;
+  c=0;
+  for (i=1: size(sin_cos_coeffs,2))
+    if (mod(i-1,2)==0)
+      s+= a * sin_cos_coeffs(i);
+    else
+      c+= a * sin_cos_coeffs(i);
+    endif;
+    a*=x;
+  endfor;
+endfunction
+
+function [s,c]=dThetaTerms(x)
+  global sin_cos_coeffs;
+  a=1;
+  s=0;
+  c=0;
+  for (i=2: size(sin_cos_coeffs,2))
+    if (mod(i-1,2)==0)
+      s+= (i-1)*a * sin_cos_coeffs(i);
+    else
+      c+= (i-1)*a * sin_cos_coeffs(i);
+    endif;
+    a*=x;
+  endfor;
+endfunction
 
 function delta = predict(x,u_a,u_i,dt=1)
 
@@ -13,17 +44,22 @@ function delta = predict(x,u_a,u_i,dt=1)
     #x is the state -> ksteer ktraction steer_offset baseline
     #     0.564107, 0.0106141, 1.54757, -0.0559079
 
-    #ksteer          = x(1);
-    #ktraction       = x(2);
-    #baseline        = x(3);
-    #steer_offset    = x(4);
+    ksteer          = x(1);
+    ktraction       = x(2);
+    baseline        = x(3);
+    steer_offset    = x(4);
 
     # "TRUE" PARAMETERS, USE ONLY FOR TESTS
                                            
-    ksteer =               0.564107;         # 0.1
-    ktraction=             0.0106141;        # 0.0106141
-    baseline=              1.54757;          # 1.4
-    steer_offset =        -0.0559079;        # 0
+    #ksteer =               0.564107;         # 0.1
+    #ktraction=             0.0106141;        # 0.0106141
+    #baseline=              1.54757;          # 1.4
+    #steer_offset =        -0.0559079;        # 0
+
+    #ksteer =               0.306;         # 0.1
+    #ktraction=             0.005;        # 0.0106141
+    #baseline=              0.752;          # 1.4
+    #steer_offset =        -0.02;        # 0
 
     #u are the values that come from the encoders (delta values)
     #u_a is the value coming from the absolute encoders
@@ -35,16 +71,23 @@ function delta = predict(x,u_a,u_i,dt=1)
     max_traction_ticks = 5000;
     #get linear part
     
-    u1_k = (ktraction*traction_ticks)/max_traction_ticks;
+    u1_k = ktraction*(traction_ticks/max_traction_ticks);
     #u1_k = (ktraction)*(traction_ticks/max_traction_ticks);
     
     #nomalize angle and retrieve angular part
-    delta_a = (steer_ticks / max_steer_ticks)*(2*pi);
-    u2_norm = atan2(sin(delta_a),cos(delta_a));
-    u2_k = u2_norm *ksteer + steer_offset; 
-   
+    #delta_a = (steer_ticks / max_steer_ticks)*(2*pi);
+    #u2_norm = atan2(sin(delta_a),cos(delta_a));
+    #u2_k = u2_norm *ksteer + steer_offset; 
+    if steer_ticks>max_steer_ticks/2
+        steer_ticks-=max_steer_ticks;
+    endif
+    steer = steer_ticks/max_steer_ticks;
+    u2_k = 2*pi*ksteer*steer+steer_offset; 
+
     sampling_time =1;
+   
     dphi   = u2_k;
+    
     tg  = tan(dphi);
     dtheta = (u1_k*tg/baseline);
 
@@ -52,99 +95,42 @@ function delta = predict(x,u_a,u_i,dt=1)
     c = cos(dtheta);
     s = sin(dtheta);
 
+    [c,s]   = thetaTerms(dtheta);
+
     dx     = u1_k*c;
     dy     = u1_k*s;
-
+ 
     delta = [dx, dy, dtheta]';
 endfunction
 
-function delta_noise = predict_noise(x,u_a,u_i,dt=1)
-    x(1)+=0.05;
-    x(2)+=0.01;
-    x(3)+=0.1;
-    delta_noise = predict(x,u_a,u_i,dt);
+function T = compute_true(x)
+    T = zeros(size(x,1),3);
+    current_T = v2t(zeros(1,3));
+    for i=1:size(x,1)
+      delta = x(i,1:3)';
+      current_T*=v2t(delta);
+      T(i,1:3)=t2v(current_T)';
+    endfor
 endfunction
 
 #concatenate the incremental values obtained by the non calibrated parameters
-function T = compute_odometry_trajectory(x,u_a,u_i,dt,b2s_v = [1.5,0,0])
-   
+function T = compute_odometry_trajectory(x,u_a,u_i,b2s_v = [1.83,-0.18,0])
+   #1.81022, -0.0228018
     T = zeros(size(u_a,1),3);
     in_sensor = v2t(b2s_v);
     current_T = v2t(zeros(1,3));
     for i=1:size(u_a,1)
         #delta = GetIncrements(x,u_a(i),u_i(i),dt(i),i);
-        delta = predict(x,u_a(i),u_i(i),dt(i));
+        delta = predict(x,u_a(i),u_i(i));
         
-        #current_T*=v2t(delta);
-        current_T*=v2t(in_sensor*delta);
-		T(i,1:3)=t2v(current_T)';
-    end
-endfunction
-
-#this is just a test... the true values are now the values of the initial guess
-function T = compute_odometry_trajectory_noise(x,u_a,u_i,dt)
-   
-    T = zeros(size(u_a,1),3);
-    in_sensor = v2t([1.5 0 0])
-    current_T = v2t(zeros(1,3));
-    for i=1:size(u_a,1)
-        #delta = GetIncrements(x,u_a(i),u_i(i),dt(i),i);
-        delta = predict_noise(x,u_a(i),u_i(i),dt(i));
+        #CHANGE COMMENT FOR FINAL PROBLEM, THIS IS JUST A TEST
         current_T*=v2t(delta);
-		T(i,1:3)=t2v(current_T)';
+        #current_T*=v2t(in_sensor)^1*v2t(delta)*v2t(in_sensor);
+        #current_T*=v2t(in_sensor*delta);
+		
+        T(i,1:3)=t2v(current_T)';
     end
-
-    
 endfunction
-
-#function J = JPredict(x,u_a,u_i)
-#    state_dim = 4;
-#    J = zeros(3,4);
-#    dx = zeros(state_dim,1);
-#    global epsilon = 1e-4;
-#    #apply finite differences
-#    for i = 1:size(x,1)
-#        dx(i) = epsilon;
-#        J(:,i)=predict_noise(x+dx,u_a,u_i) - predict_noise(x-dx,u_a,u_i);
-#        dx(i)=0;
-#    endfor
-#    J*=.5/epsilon;
-#endfunction
-
-#function [e,J] = errorAndJacobian(x,u_a,u_i,z)
-#    
-##    e = predict_noise(x,u_a,u_i) - z;
-##    J = JPredict(x,u_a,u_i);#
-
-#endfunction 
-
-#function x_new = calibrate(x,U_a,U_i,z)
-#    dim = 4;
-#    x_new = x
-#    n_iters = 2;
-#    n_points = size(U_a,1)
-#    for it=1:n_iters
-#        H = zeros(dim,dim);
-#        b = zeros(dim,1);
-#        sum_chi = 0;
-#        for i=1:n_points
-#            #obs = z(i,:);
-#            u_a = U_a(i);
-#            u_i = U_i(i); 
-#            obs = predict(x,u_a,u_i); 
-#            [e, J] = errorAndJacobian(x_new,u_a,u_i,obs);
-#            
-#            H+=J'*J; 
-#            b+=J'*e;
-#            sum_chi+=e'*e;
-#        endfor
-#        disp("the value of the chi is: ");
-#        it
-#        sum_chi
-#        dx=-H\b;
-#        x_new = x+dx;
-#    endfor
-#endfunction
 
 # the problem to solve now has the following parameters
 # x = (k_steer, k_traction, baseline, steering_offset, x_b2s, y_b2s, theta_b2s) -> dim 7
@@ -163,58 +149,64 @@ function x_new = calibrate(initial_guess,U_a,U_i,z)
     ktraction=             0.0106141;        # 0.0106141
     baseline=              1.54757;          # 1.4
     steer_offset =        -0.0559079; 
-    #x_new = [initial_guess(1),initial_guess(2),initial_guess(3),initial_guess(4),in_tx,in_ty,in_th]'
-    threshold = 10;
-    x_new = [0.564107,0.0106141,1.54757,-0.0559079,in_tx,in_ty,in_th]'
-    #s2r = eye(3);
-    s2r = [ 1 0 1.5;
-            0 1 0;
-            0 0 1];
+    x_new = [initial_guess(1),initial_guess(2),initial_guess(3),initial_guess(4),in_tx,in_ty,in_th]'
+    threshold = 15;
+    #x_new = [0.564107,0.0106141,1.54757,-0.0559079,in_tx,in_ty,in_th]';
+   
     dim =7;
     num_iterations = 100;
     n_points = size(z,1)
+    #n_points = 200
+    
     for it= 1:num_iterations
-        H = zeros(dim,dim); b = zeros(dim,1);
+        H = zeros(dim,dim); b = zeros(dim,1);current_T = v2t(zeros(1,3));
         sum_chi = 0;
+        max_chi = 0;
         for i = 1:n_points
-            
             u_a = U_a(i);
             u_i = U_i(i); 
-            #pose_r = predict(x,u_a(i),u_i(i),dt(i));#z_hat but in the baseline
-            
             obs = z(i,:); #z in sensor frame
-            #[e J] = errorAndJacobian_(s2r,pose_r,obs);
-            [e, J] = errorAndJacobian_(x_new,u_a,u_i,obs);
+            #[e J] = PoseParamsErrorAndJacobian(x_new,u_a,u_i,obs);
+            [e J] = erroeAndJacobians_fd(x_new,u_a,u_i,obs);
             chi=e'*e;
+            if chi>max_chi
+                max_chi = chi;
+            endif
             if chi > threshold
+               
                 e*=sqrt(threshold/chi);
                 chi=threshold;
             endif
-            H+=J'*J;
-            b+=J'*e;
+            #i
+            #e
+            omega = 1*eye(3);
+            H+=J'*omega*J;
+            b+=J'*omega*e;
             
             sum_chi+= chi;
         endfor
         disp("the value of the chi is: ");
         it
         sum_chi
+        max_chi
         #H
         #b
-        dx = -H\b;
+        damp_H = H + eye(dim);#*0.2;
+        dx = -damp_H\b
         #qua dx sarebbe un box plus per le ultie 3 componenti e un semplice piu per le prime 4
         x_new = boxplus_(x_new,dx)
     endfor    
 endfunction
 
-function J = JPredict(x,u_a,u_i,z_hat)
-   x_t = [x(5);
-           x(6);
-           x(7)];
-    #b2s = v2t(x_t);
-    #b2s
+function Jp = fjPredictParams(x,u_a,u_i)
+   x_k = [x(1); x(2); x(3); x(4)];
+   x_t = [x(5); x(6); x(7)];
+
+    b2s = v2t(x_t)^-1;#actual transf guess
     state_dim = 7;
     dx_k0_dim = 4;
-    J = zeros(3,state_dim);
+    #J = zeros(3,state_dim);
+    J = zeros(6,state_dim); # now the error is tall 6
     #read the parameters of the baseline to do numerical diff
     k_x = x(1:4);
     dx = zeros(dx_k0_dim,1);
@@ -222,99 +214,173 @@ function J = JPredict(x,u_a,u_i,z_hat)
     #apply finite differences for firs 4 parameters
     for i = 1:size(k_x,1)
         dx(i) = epsilon;
-        #if i == 2
-        #  disp("-----") 
-        #  disp( predict(k_x+dx,u_a,u_i)- predict(k_x-dx,u_a,u_i) )
-        #  disp("-----") 
-        #  disp( .5*(predict(k_x+dx,u_a,u_i)- predict(k_x-dx,u_a,u_i))/epsilon )
-        #
-        #endif
-        J(:,i)= predict(k_x+dx,u_a,u_i) - predict(k_x-dx,u_a,u_i);
+        Xi_p = v2t(predict(x_k+dx,u_a,u_i));
+        Xj_p = v2t(x_t)^-1*Xi_p*v2t(x_t);
+        Ri_p=Xi_p(1:2,1:2);
+        Rj_p=Xj_p(1:2,1:2);
+        ti_p=Xi_p(1:2,3);
+        tj_p=Xj_p(1:2,3);
+        tij_p=tj_p-ti_p;
+
+        Xi_m = v2t(predict(x_k-dx,u_a,u_i));
+        Xj_m = v2t(x_t)^-1*Xi_m*v2t(x_t);
+        Ri_m=Xi_m(1:2,1:2);
+        Rj_m=Xj_m(1:2,1:2);
+        ti_m=Xi_m(1:2,3);
+        tj_m=Xj_m(1:2,3);
+        tij_m=tj_m-ti_m;
+        Ri_transpose_p=Ri_p';
+        Ri_transpose_m=Ri_m';
+        #Z_hat_p = eye(3);
+        #Z_hat_p(1:2,1:2) = Ri_transpose_p*Rj_p;
+        #Z_hat_p(1:2,3) = Ri_transpose_p*tij_p;
+        Z_hat_p = Xj_p;
+        Z_hat_m = Xj_m;
+        #Z_hat_m = eye(3);
+        #Z_hat_m(1:2,1:2) = Ri_transpose_m*Rj_m;
+        #Z_hat_m(1:2,3) = Ri_transpose_m*tij_m;
+
+        d_plus =  reshape(Z_hat_p(1:2,:),[],1);
+        d_minus = reshape(Z_hat_m(1:2,:),[],1);
+        J(:,i)= d_plus - d_minus;
         dx(i)=0;
     endfor
-    
     J*=.5/epsilon;
-    #now fill the part relative to the pose pose
-    J(1:2,5:6)=eye(2);
-    J(1:2,7)=[-z_hat(2),
-	  z_hat(1)]';
-    
-    
-     
-    
-    
+
 endfunction
 
-function [e,J] = errorAndJacobian_(x,u_a,u_i,z)
-    #boxminus.. or just normalize the angle penso vada bene
-    x_t = [x(5);
-           x(6);
-           x(7)];
-           
-    b2s = v2t(x_t);
-    z_hat = b2s*predict(x,u_a,u_i);
+function Jp = JPredictParams(x,u_a,u_i,Z)
     
-    #z_hat = v2t(predict(x,u_a,u_i))*x_t;
-    
-    #e = z'-z';
-    e =  z_hat- z';
-    e(3) = atan2(sin(e(3)),cos(e(3)));
-    J = JPredict(x,u_a,u_i,z_hat);
-    
+    x_k = [x(1); x(2); x(3); x(4)];
+    x_t = [x(5); x(6); x(7)];
+    meas_dim = 3;
+    state_dim = 7;
+    k_dim = 4;
+    Xs = v2t(x_t);
+    Jp = zeros(meas_dim,state_dim);
+    dx=zeros(k_dim,1);
+    global epsilon=1e-7;
+    #e = t2v(Z^-1* Xs^-1*v2t(Predict)*Xs)
+    for (i=1:k_dim)
+      dx(i)=epsilon;
+      d_plus  = t2v(Z^-1*Xs^-1*v2t(predict(x_k+dx,u_a,u_i))*Xs);
+      d_minus = t2v(Z^-1*Xs^-1*v2t(predict(x_k-dx,u_a,u_i))*Xs);
+      #d_plus =predict(x_k+dx,u_a,u_i);
+      #d_minus = predict(x_k-dx,u_a,u_i);
+      Jp(:,i)= d_plus- d_minus;
+      dx(i)=0;
+    endfor;
    
+    Jp*=.5/epsilon;
+
+endfunction
+
+function Js = JPredictSensor(x,u_a,u_i,Z)
+    
+    x_k = [x(1); x(2); x(3); x(4)];
+    x_t = [x(5); x(6); x(7)];
+    meas_dim = 3;
+    state_dim = 7;
+    k_dim = 3;
+    Js = zeros(meas_dim,state_dim);
+    Xs = v2t(x_t);
+    dx=zeros(k_dim,1);
+    global epsilon=1e-7;
+    #e = t2v(Z^-1* Xs^-1*v2t(Predict)*Xs)
+    for (i=1:k_dim)
+      dx(i)=epsilon;
+      Xs = v2t(x_t);
+      Xp = Xs*v2t(dx);
+      d_plus  = t2v(Z^-1*Xp^-1*v2t(predict(x_k,u_a,u_i))*Xp);
+      Xm = Xp = Xs*v2t(-dx);
+      d_minus = t2v(Z^-1*Xm^-1*v2t(predict(x_k,u_a,u_i))*Xm);
+      Js(:,4+i)= d_plus- d_minus;
+      dx(i)=0;
+    endfor;
+    Js*=.5/epsilon;
+
+endfunction 
+
+function [e J] = erroeAndJacobians_fd(x,u_a,u_i,obs)
+    
+    #parameters of the mobile base
+    x_k = [x(1); x(2); x(3); x(4)];
+    #parameters of extrinsic cam
+    x_t = [x(5); x(6); x(7)];
+
+    Z = v2t(obs);
+    #base of robot
+    Xi = v2t(predict(x_k,u_a,u_i));
+    #transform robot-sensor
+    Xs = v2t(x_t);
+    #prediction
+    h_x = Xs^-1*Xi*Xs;
+    #error function
+    
+    e = t2v(Z^-1*h_x);
+    #Jacobian wrt kinematic parameters
+    Jp = JPredictParams(x,u_a,u_i,Z);
+    #Jacobian wrt extrinsic cam
+    Js = JPredictSensor(x,u_a,u_i,Z);
+    J=Jp+Js;
+    
+
 
 endfunction
 
 
-function [e J] = errorAndJacobian(X,P,Z)
-    #P are the poses in baseline frame
-    #Z are the poses in sensor frame
-    #J is of dimension -> (error_dim,state_dim) 
-    J = zeros(3,7); 
+function [e,J] = PoseParamsErrorAndJacobian(x,u_a,u_i,obs)
+    J = JPredictParams(x,u_a,u_i);
+    x_k = [x(1); x(2); x(3); x(4)];
+    x_t = [x(5); x(6); x(7)];
+    Z = v2t(obs);
 
-    #NOT 100% SURE ABOUT IT
-    z_hat = v2t(X*P);
+    Xi = v2t(x_t)^-1;
+    Xj = Xi*v2t(predict(x_k,u_a,u_i))*v2t(x_t); #h(x)
 
-    #Xr = v2t(P);
-    Zs = v2t(Z);
-    #P
-    #Xr
+    #Xi = v2t(predict(x_k,u_a,u_i));
+    #Xj = v2t(x_t)^-1*Xi*v2t(x_t); #h(x)
     
-    #apply flattening 
-    #ix_r=reshape(Xr(1:2,:),[],1)
-    #zat=reshape(z_hat(1:2,:),[],1)
-    #obd=reshape(Zs(1:2,:),[],1)
-    e = reshape(z_hat(1:2,:),[],1) - reshape(Zs(1:2,:),[],1); #error in now a 1x6
+    #Xj = v2t(obs);
     
-    R = Xr(1:2,1:2);
-    t = Xr(1:2,3);
-    g_r = X(1:2,1:2);#actual guess for rotation
-    g_t = X(1:2,3);#actual guess for traslation
-    dr_a = [0 -1; #derivative of rotation evaluated in zero 
-            1 0];
-    j_dr = reshape(R*dr_a*g_r,[],1);
-    j_t = R; #comes from -> R(R(da)t + dt)+t -> R(derive wrt t)
-    #dx_t = 
-    J=zeros(6,3);
-    J(1:4,3) = j_dr;
-    J(5:6,1:2)=j_t;
-    #J(5:6,3) = R*dr_a*g_t;
-    J(5:6,3) = R*g_t;
-    
+    Ri=Xi(1:2,1:2);
+    Rj=Xj(1:2,1:2);
+    ti=Xi(1:2,3);
+    tj=Xj(1:2,3);
+    tij=tj-ti;
+    Ri_transpose=Ri';
+    #Ji=zeros(6,3);
+    dRx0 = [0 -1;
+            1  0];
+    J(5:6,5:6) = Ri';
+    rx = reshape(Ri'*dRx0*Rj,[],1);
+    stj = -Ri' * dRx0 * tj;
+    J(:,7) = [rx; stj];
+    Z_hat = Xj;
+    #Z_hat = eye(3);
+    #Z_hat(1:2,1:2) = Ri_transpose*Rj;
+    #Z_hat(1:2,3) = Ri_transpose*tij;
+    e = reshape(Z_hat(1:2,:),[],1) - reshape(Z(1:2,:),[],1);
+    Z=Z_hat;
+    ev = t2v(Z^-1*Z_hat)#t2v(Z_hat)-t2v(Z)
+
+
 endfunction
 
 function X = boxplus_(X,dx)
-    X_transf = [X(5);
+    X_s = [X(5);
                 X(6);
                 X(7)];
+
     dx_s = [dx(5);
             dx(6);
             dx(7)];
     for i = 1:4
       X(i)+=dx(i);
     endfor
-    
-    #potrebbe esse sbagliata pe broadcasting
-    #X(5:7) = v2t(X_transf)*dx_s;
-    X(5:7) = v2t(dx_s)*X_transf;
+  
+ 
+    #X(5:7) = v2t(dx_s)*X_transf;
+    X(5:7) = t2v(v2t(dx_s)*v2t(X_s));
+
 endfunction

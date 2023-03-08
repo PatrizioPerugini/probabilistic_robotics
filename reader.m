@@ -1,17 +1,20 @@
 #"dataset.txt"
 #function [Time_stamp Steer_ticks Traction_tick Model_pose Tracker_pose ] = load_ds(filepath)
-function [times steer_ticks traction_ticks poses sensor_poses initial_guess] = reader()
+1;
+source "utils.m"
+function [times steer_ticks traction_ticks poses sensor_poses delta_sensor_poses initial_guess] = reader()
     #line3 is of interest since there is the initial guess
     #line5 is of interest since there are the max ranges
     filepath = "dataset.txt";
     poses = [];
     sensor_poses = [];
+    delta_sensor_poses=[];
     times = [];
     steer_ticks = [];
     traction_ticks = [];
     k_steer = 0; k_traction = 0; axis_length = 0; steer_offset = 0; k_steer_max = 0; k_traction_max = 0;
-    past_time=0; past_steer_ticks=0; past_traction_ticks=0;
-    new_time=0; new_steer_ticks=0; new_traction_ticks=0;
+    past_time=0; past_steer_ticks=0; past_traction_ticks=0;past_sensor_pose=[0 0 0];
+    new_time=0; new_steer_ticks=0; new_traction_ticks=0;new_sensor_pose=[0 0 0];
     fid = fopen(filepath,'r');
     i = 1;
     while true
@@ -40,6 +43,7 @@ function [times steer_ticks traction_ticks poses sensor_poses initial_guess] = r
             past_time=read_time(elems);
             past_steer_ticks=read_steer_ticks(elems); 
             past_traction_ticks=read_traction_ticks(elems);
+            past_sensor_pose = read_sensor_pose(elems);
             
             
         end
@@ -54,14 +58,26 @@ function [times steer_ticks traction_ticks poses sensor_poses initial_guess] = r
             #STEER          
             new_steer_ticks    = read_steer_ticks(elems);
 
-  
             #TRACTION
             
             new_traction_ticks = read_traction_ticks(elems);
+
+            #pose
+
+            new_sensor_pose = read_sensor_pose(elems);
             #if i==68
             #new_traction_ticks
             #past_traction_ticks
             delta_traction = new_traction_ticks-past_traction_ticks;
+
+            #delta_sensor_pose = v2t(new_sensor_pose)-past_sensor_pose;
+            delta_sensor_pose = t2v(v2t(past_sensor_pose)^-1*v2t(new_sensor_pose))';
+            #disp("-----------")
+            #i
+            #delta_sensor_pose(3)=normalizeAngle(new_sensor_pose(3))
+            #delta_sensor_pose
+            past_sensor_pose = new_sensor_pose;
+
 
             if delta_traction < -100000
                 max_int = 4294967295; # max value for uint32
@@ -82,7 +98,7 @@ function [times steer_ticks traction_ticks poses sensor_poses initial_guess] = r
             new_pose = read_pose(elems);
             
             #SENSOR POSE
-            new_sensor_pose = read_sensor_pose(elems);
+            #new_sensor_pose = read_sensor_pose(elems);
             
             #populate the structures 
             steer_ticks = [steer_ticks; new_steer_ticks];
@@ -91,6 +107,7 @@ function [times steer_ticks traction_ticks poses sensor_poses initial_guess] = r
             poses =[poses; new_pose] ;
             
             sensor_poses = [sensor_poses;new_sensor_pose];
+            delta_sensor_poses = [delta_sensor_poses;delta_sensor_pose];
             
             times = [times;delta_t];
 
