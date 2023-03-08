@@ -198,56 +198,7 @@ function x_new = calibrate(initial_guess,U_a,U_i,z)
     endfor    
 endfunction
 
-function Jp = fjPredictParams(x,u_a,u_i)
-   x_k = [x(1); x(2); x(3); x(4)];
-   x_t = [x(5); x(6); x(7)];
 
-    b2s = v2t(x_t)^-1;#actual transf guess
-    state_dim = 7;
-    dx_k0_dim = 4;
-    #J = zeros(3,state_dim);
-    J = zeros(6,state_dim); # now the error is tall 6
-    #read the parameters of the baseline to do numerical diff
-    k_x = x(1:4);
-    dx = zeros(dx_k0_dim,1);
-    global epsilon = 1e-4;
-    #apply finite differences for firs 4 parameters
-    for i = 1:size(k_x,1)
-        dx(i) = epsilon;
-        Xi_p = v2t(predict(x_k+dx,u_a,u_i));
-        Xj_p = v2t(x_t)^-1*Xi_p*v2t(x_t);
-        Ri_p=Xi_p(1:2,1:2);
-        Rj_p=Xj_p(1:2,1:2);
-        ti_p=Xi_p(1:2,3);
-        tj_p=Xj_p(1:2,3);
-        tij_p=tj_p-ti_p;
-
-        Xi_m = v2t(predict(x_k-dx,u_a,u_i));
-        Xj_m = v2t(x_t)^-1*Xi_m*v2t(x_t);
-        Ri_m=Xi_m(1:2,1:2);
-        Rj_m=Xj_m(1:2,1:2);
-        ti_m=Xi_m(1:2,3);
-        tj_m=Xj_m(1:2,3);
-        tij_m=tj_m-ti_m;
-        Ri_transpose_p=Ri_p';
-        Ri_transpose_m=Ri_m';
-        #Z_hat_p = eye(3);
-        #Z_hat_p(1:2,1:2) = Ri_transpose_p*Rj_p;
-        #Z_hat_p(1:2,3) = Ri_transpose_p*tij_p;
-        Z_hat_p = Xj_p;
-        Z_hat_m = Xj_m;
-        #Z_hat_m = eye(3);
-        #Z_hat_m(1:2,1:2) = Ri_transpose_m*Rj_m;
-        #Z_hat_m(1:2,3) = Ri_transpose_m*tij_m;
-
-        d_plus =  reshape(Z_hat_p(1:2,:),[],1);
-        d_minus = reshape(Z_hat_m(1:2,:),[],1);
-        J(:,i)= d_plus - d_minus;
-        dx(i)=0;
-    endfor
-    J*=.5/epsilon;
-
-endfunction
 
 function Jp = JPredictParams(x,u_a,u_i,Z)
     
@@ -329,43 +280,6 @@ function [e J] = erroeAndJacobians_fd(x,u_a,u_i,obs)
 endfunction
 
 
-function [e,J] = PoseParamsErrorAndJacobian(x,u_a,u_i,obs)
-    J = JPredictParams(x,u_a,u_i);
-    x_k = [x(1); x(2); x(3); x(4)];
-    x_t = [x(5); x(6); x(7)];
-    Z = v2t(obs);
-
-    Xi = v2t(x_t)^-1;
-    Xj = Xi*v2t(predict(x_k,u_a,u_i))*v2t(x_t); #h(x)
-
-    #Xi = v2t(predict(x_k,u_a,u_i));
-    #Xj = v2t(x_t)^-1*Xi*v2t(x_t); #h(x)
-    
-    #Xj = v2t(obs);
-    
-    Ri=Xi(1:2,1:2);
-    Rj=Xj(1:2,1:2);
-    ti=Xi(1:2,3);
-    tj=Xj(1:2,3);
-    tij=tj-ti;
-    Ri_transpose=Ri';
-    #Ji=zeros(6,3);
-    dRx0 = [0 -1;
-            1  0];
-    J(5:6,5:6) = Ri';
-    rx = reshape(Ri'*dRx0*Rj,[],1);
-    stj = -Ri' * dRx0 * tj;
-    J(:,7) = [rx; stj];
-    Z_hat = Xj;
-    #Z_hat = eye(3);
-    #Z_hat(1:2,1:2) = Ri_transpose*Rj;
-    #Z_hat(1:2,3) = Ri_transpose*tij;
-    e = reshape(Z_hat(1:2,:),[],1) - reshape(Z(1:2,:),[],1);
-    Z=Z_hat;
-    ev = t2v(Z^-1*Z_hat)#t2v(Z_hat)-t2v(Z)
-
-
-endfunction
 
 function X = boxplus_(X,dx)
     X_s = [X(5);
