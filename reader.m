@@ -83,11 +83,19 @@ function [times steer_ticks traction_ticks poses sensor_poses delta_sensor_poses
                 max_int = 4294967295; # max value for uint32
                 delta_traction = (max_int - past_traction_ticks) + new_traction_ticks;
             endif
-            if abs(delta_traction)>5000
+            #con < e > di 5000 vie na cosa decente
+            if delta_traction>5000
+                
+                #WARNINGGGGGGGGGG
+
                 #disp("ops")
                 #delta_t
                 #delta_traction
                 #disp("-----------")
+                delta_traction=5000;
+            endif
+            if delta_traction < -5000
+                delta_traction=-5000;
             endif
             past_traction_ticks=new_traction_ticks;
            

@@ -25,7 +25,7 @@ filepath = "/dataset.txt";
 
 #x_new = calibrate_test(initial_guess,steer_t,traction_t,poses)
 
-x_new = calibrate(initial_guess,steer_t,traction_t,delta_sensor_poses)
+#x_new = calibrate(initial_guess,steer_t,traction_t,delta_sensor_poses)
 #x_k = x_new(1:4);
 #x_b2s = x_new(5:7);
 h = figure(1)
